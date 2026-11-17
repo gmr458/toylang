@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/gmr458/toylang/lexer"
 	"github.com/gmr458/toylang/token"
@@ -20,6 +21,9 @@ func Start(in io.Reader, out io.Writer) {
 		scanned := scanner.Scan()
 		if !scanned {
 			return
+		}
+		if err := scanner.Err(); err != nil {
+			fmt.Fprintln(os.Stderr, "reading standard input:", err)
 		}
 
 		line := scanner.Text()

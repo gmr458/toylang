@@ -2,34 +2,10 @@ package parser
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/gmr458/toylang/ast"
 	"github.com/gmr458/toylang/lexer"
 	"github.com/gmr458/toylang/token"
-)
-
-const (
-	_ int = iota
-	LOWEST
-
-	// ==
-	EQUALS
-
-	// > or <
-	LESSGREATER
-
-	// +
-	SUM
-
-	// *
-	PRODUCT
-
-	// -X or !X
-	PREFIX
-
-	// myFunction(x)
-	CALL
 )
 
 type (
@@ -64,6 +40,18 @@ func New(l *lexer.Lexer) *Parser {
 	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
 	p.registerPrefix(token.IDENT, p.parseIdentifier)
 	p.registerPrefix(token.INT, p.parseIntegerLiteral)
+	p.registerPrefix(token.BANG, p.parsePrefixExpression)
+	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
+
+	p.infixParseFns = make(map[token.TokenType]infixParseFn)
+	p.registerInfix(token.PLUS, p.parseInfixExpression)
+	p.registerInfix(token.MINUS, p.parseInfixExpression)
+	p.registerInfix(token.SLASH, p.parseInfixExpression)
+	p.registerInfix(token.ASTERISK, p.parseInfixExpression)
+	p.registerInfix(token.EQ, p.parseInfixExpression)
+	p.registerInfix(token.NOT_EQ, p.parseInfixExpression)
+	p.registerInfix(token.LT, p.parseInfixExpression)
+	p.registerInfix(token.GT, p.parseInfixExpression)
 
 	// Read two tokens, so curToken and peekToken are both set
 	p.nextToken()
@@ -84,23 +72,9 @@ func (p *Parser) registerInfix(tokenType token.TokenType, fn infixParseFn) {
 	p.infixParseFns[tokenType] = fn
 }
 
-func (p *Parser) parseIdentifier() ast.Expression {
-	return &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
-}
-
-func (p *Parser) parseIntegerLiteral() ast.Expression {
-	lit := &ast.IntegerLiteral{Token: p.curToken}
-
-	value, err := strconv.ParseInt(p.curToken.Literal, 0, 64)
-	if err != nil {
-		msg := fmt.Sprintf("could not parse %q as integer", p.curToken.Literal)
-		p.errors = append(p.errors, msg)
-		return nil
-	}
-
-	lit.Value = value
-
-	return lit
+func (p *Parser) noPrefixParseFnError(t token.TokenType) {
+	msg := fmt.Sprintf("no prefix parse function for %s found", t)
+	p.errors = append(p.errors, msg)
 }
 
 func (p *Parser) nextToken() {
@@ -130,71 +104,6 @@ func (p *Parser) expectPeek(t token.TokenType) bool {
 
 	p.peekError(t)
 	return false
-}
-
-// parseLetStatement constructs an *ast.LetStatement node with the
-// token it’s currently sitting on (a token.LET token) and then
-// advances the tokens while making assertions about the next token
-// with calls to expectPeek. First it expects a token.IDENT token,
-// which it then uses to construct an *ast.Identifier node. Then it
-// expects an equal sign and finally it jumps over the expression
-// following the equal sign until it encounters a semicolon.
-func (p *Parser) parseLetStatement() *ast.LetStatement {
-	stmt := &ast.LetStatement{Token: p.curToken}
-
-	if !p.expectPeek(token.IDENT) {
-		return nil
-	}
-
-	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
-
-	if !p.expectPeek(token.ASSIGN) {
-		return nil
-	}
-
-	// TODO: We're skipping the expressions until we
-	// encounter a semicolon
-	for !p.curTokenIs(token.SEMICOLON) {
-		p.nextToken()
-	}
-
-	return stmt
-}
-
-func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
-	stmt := &ast.ReturnStatement{Token: p.curToken}
-
-	p.nextToken()
-
-	// TODO: We're skipping the expressions until we
-	// encounter a semicolon
-	for !p.curTokenIs(token.SEMICOLON) {
-		p.nextToken()
-	}
-
-	return stmt
-}
-
-func (p *Parser) parseExpression(precedence int) ast.Expression {
-	prefix := p.prefixParseFns[p.curToken.Type]
-	if nil == prefix {
-		return nil
-	}
-	leftExp := prefix()
-
-	return leftExp
-}
-
-func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
-	stmt := &ast.ExpressionStatement{Token: p.curToken}
-
-	stmt.Expression = p.parseExpression(LOWEST)
-
-	if p.peekTokenIs(token.SEMICOLON) {
-		p.nextToken()
-	}
-
-	return stmt
 }
 
 func (p *Parser) parseStatement() ast.Statement {
